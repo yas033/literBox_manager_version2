@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>literBoxManager2 Sensor Test</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+  </head>
+  <body>
+    <nav class="global-nav" aria-label="SniffKitty sections">
+      <span class="brand-mark">●</span>
+      <span>Overview</span>
+      <span>Sensors</span>
+      <span>Readings</span>
+      <span>Support</span>
+    </nav>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ESP32-S3-N16R8 live sensor dashboard</p>
+          <h1>SniffKitty Lab</h1>
+          <p class="subhead">Litter-box environment signals, refreshed locally.</p>
+        </div>
+        <div class="actions">
+          <button id="seedButton" class="secondary" type="button">Demo</button>
+          <button id="refreshButton" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <div>
+          <span>Last update</span>
+          <strong id="lastUpdate">Waiting</strong>
+        </div>
+        <div>
+          <span>Device</span>
+          <strong id="deviceId">No device</strong>
+        </div>
+        <div>
+          <span>Server</span>
+          <strong>127.0.0.1:5052</strong>
+        </div>
+      </section>
+
+      <section id="cards" class="card-grid" aria-live="polite"></section>
+
+      <section class="content-grid">
+        <article class="panel">
+          <h2>Next Steps</h2>
+          <ul id="nextSteps"></ul>
+        </article>
+
+        <article class="panel">
+          <h2>Recent Readings</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Temp</th>
+                  <th>Humidity</th>
+                  <th>MQ135</th>
+                  <th>Motion</th>
+                  <th>Events</th>
+                </tr>
+              </thead>
+              <tbody id="recentRows"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>

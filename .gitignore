@@ -1,0 +1,19 @@
+# Local WiFi/server secrets
+arduino_secrets.h
+
+# Runtime data
+data/*.csv
+data/*.db
+
+# Arduino build output
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS/editor
+.DS_Store
+.vscode/
