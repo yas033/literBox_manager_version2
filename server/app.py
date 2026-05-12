@@ -14,6 +14,9 @@ FIELDNAMES = [
     "device_id",
     "temperature_c",
     "humidity_percent",
+    "amg_ambient_c",
+    "amg_max_c",
+    "amg_hot_pixels",
     "motion",
     "motion_event_count",
     "mq135_raw",
@@ -89,6 +92,9 @@ def read_rows():
             normalized["_dt"] = parse_time(normalized["timestamp"])
             normalized["_temperature_c"] = parse_float(normalized["temperature_c"])
             normalized["_humidity_percent"] = parse_float(normalized["humidity_percent"])
+            normalized["_amg_ambient_c"] = parse_float(normalized["amg_ambient_c"])
+            normalized["_amg_max_c"] = parse_float(normalized["amg_max_c"])
+            normalized["_amg_hot_pixels"] = parse_int(normalized["amg_hot_pixels"])
             normalized["_motion"] = parse_int(normalized["motion"])
             normalized["_motion_event_count"] = parse_int(normalized["motion_event_count"])
             normalized["_mq135_raw"] = parse_int(normalized["mq135_raw"])
@@ -131,14 +137,30 @@ def status_for_odor(latest):
     return "normal"
 
 
+def status_for_thermal(latest):
+    if not latest or latest.get("amg_max_c", "") == "":
+        return "collecting"
+
+    thermal_delta = latest["_amg_max_c"] - latest["_amg_ambient_c"]
+    hot_pixels = latest["_amg_hot_pixels"]
+
+    if hot_pixels >= 16 or thermal_delta >= 6:
+        return "review"
+    if hot_pixels >= 6 or thermal_delta >= 3:
+        return "watch"
+    return "normal"
+
+
 def build_payload():
     rows = read_rows()
     latest = rows[-1] if rows else None
     recent = rows[-30:]
     status = status_for_environment(latest)
     odor_status = status_for_odor(latest)
+    thermal_status = status_for_thermal(latest)
     has_temperature = bool(latest and latest.get("temperature_c", "") != "")
     has_humidity = bool(latest and latest.get("humidity_percent", "") != "")
+    has_thermal = bool(latest and latest.get("amg_max_c", "") != "")
 
     cards = {
         "temperature": {
@@ -153,16 +175,22 @@ def build_payload():
             "detail": "Humidity context for odor buildup.",
             "status": status if latest else "collecting",
         },
+        "thermal": {
+            "title": "Thermal IR",
+            "value": f"{latest['_amg_max_c']:.1f}C" if has_thermal else "No data",
+            "detail": f"AMG8833 max pixel, hot pixels: {latest['_amg_hot_pixels']}" if has_thermal else "AMG8833 thermal presence attempt.",
+            "status": thermal_status if latest else "collecting",
+        },
         "motion": {
-            "title": "SR60 Motion",
+            "title": "Presence Signal",
             "value": "Detected" if latest and latest["_motion"] else "Clear",
-            "detail": "Presence signal from SR60/PIR.",
+            "detail": "AMG thermal presence by default; SR60/PIR is optional.",
             "status": "motion" if latest and latest["_motion"] else "normal",
         },
         "events": {
-            "title": "Motion Events",
+            "title": "Presence Events",
             "value": str(latest["_motion_event_count"]) if latest else "0",
-            "detail": "Rising-edge motion count since ESP32 boot.",
+            "detail": "Thermal stay events since ESP32 boot.",
             "status": "normal" if latest else "collecting",
         },
         "odor": {
@@ -183,6 +211,8 @@ def build_payload():
             next_steps.append("Temperature is warm; watch for faster litter-box odor buildup.")
         if latest["_motion"]:
             next_steps.append("Motion is currently detected near the litter-box area.")
+        if latest.get("amg_max_c", "") != "" and thermal_status in {"watch", "review"}:
+            next_steps.append("Thermal IR shows a warm region near the sensor. Compare with motion and camera context.")
         if latest["_mq135_raw"] >= 1800:
             next_steps.append("MQ135 odor/VOC signal is elevated. Compare with a clean-air baseline.")
         if latest.get("sensor_status") in {"dht_read_failed", "amg_ok_dht_failed"}:
@@ -206,6 +236,9 @@ def public_row(row):
         "device_id": row["device_id"],
         "temperature_c": row["_temperature_c"] if row.get("temperature_c", "") != "" else None,
         "humidity_percent": row["_humidity_percent"] if row.get("humidity_percent", "") != "" else None,
+        "amg_ambient_c": row["_amg_ambient_c"] if row.get("amg_ambient_c", "") != "" else None,
+        "amg_max_c": row["_amg_max_c"] if row.get("amg_max_c", "") != "" else None,
+        "amg_hot_pixels": row["_amg_hot_pixels"],
         "motion": row["_motion"],
         "motion_event_count": row["_motion_event_count"],
         "mq135_raw": row["_mq135_raw"],
@@ -234,6 +267,9 @@ def seed_demo():
                 "device_id": "demo_esp32s3",
                 "temperature_c": 23.5 + index * 0.4,
                 "humidity_percent": 48 + index * 2,
+                "amg_ambient_c": 23.0 + index * 0.2,
+                "amg_max_c": 25.0 + index * 0.7,
+                "amg_hot_pixels": index,
                 "motion": 1 if index in {2, 3, 6} else 0,
                 "motion_event_count": index // 2,
                 "mq135_raw": 850 + index * 120,
@@ -251,6 +287,9 @@ def upload():
         "device_id": request.form.get("device_id", "esp32s3_litterbox_2"),
         "temperature_c": request.form.get("temperature_c", ""),
         "humidity_percent": request.form.get("humidity_percent", ""),
+        "amg_ambient_c": request.form.get("amg_ambient_c", ""),
+        "amg_max_c": request.form.get("amg_max_c", ""),
+        "amg_hot_pixels": request.form.get("amg_hot_pixels", "0"),
         "motion": request.form.get("motion", "0"),
         "motion_event_count": request.form.get("motion_event_count", "0"),
         "mq135_raw": request.form.get("mq135_raw", "0"),

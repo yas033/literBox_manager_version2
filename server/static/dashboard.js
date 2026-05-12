@@ -1,4 +1,4 @@
-const cardOrder = ["temperature", "humidity", "odor", "motion", "events"];
+const cardOrder = ["temperature", "humidity", "thermal", "odor", "motion", "events"];
 
 function timeLabel(value) {
   if (!value) return "Waiting";
@@ -26,6 +26,13 @@ function renderCards(cards) {
   }
 }
 
+function formatNumber(value, suffix = "", digits = 1) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return "No data";
+  }
+  return `${Number(value).toFixed(digits)}${suffix}`;
+}
+
 function renderRecent(rows) {
   const tbody = document.querySelector("#recentRows");
   tbody.innerHTML = "";
@@ -34,8 +41,10 @@ function renderRecent(rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${timeLabel(row.timestamp)}</td>
-      <td>${row.temperature_c.toFixed(1)}C</td>
-      <td>${row.humidity_percent.toFixed(1)}%</td>
+      <td>${formatNumber(row.temperature_c, "C")}</td>
+      <td>${formatNumber(row.humidity_percent, "%")}</td>
+      <td>${formatNumber(row.amg_max_c, "C")}</td>
+      <td>${row.amg_hot_pixels ?? 0}</td>
       <td>${row.mq135_raw}</td>
       <td>${row.motion ? "Detected" : "Clear"}</td>
       <td>${row.motion_event_count}</td>

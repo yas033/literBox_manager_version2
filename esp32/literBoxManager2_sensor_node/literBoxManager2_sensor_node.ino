@@ -49,6 +49,10 @@ const unsigned long MQ135_WARMUP_MS = 90000UL;
 const unsigned long PIR_DEBOUNCE_MS = 2000UL;
 const unsigned long MOTION_EVENT_COOLDOWN_MS = 10000UL;
 const unsigned long MIN_SESSION_MS = 5000UL;
+const bool USE_PIR_MOTION = false;
+const float THERMAL_DELTA_TRIGGER_C = 3.0;
+const int THERMAL_HOT_PIXEL_TRIGGER = 4;
+const unsigned long THERMAL_DEBOUNCE_MS = 6000UL;
 
 DHT dht(DHT_PIN, DHT_TYPE);
 Adafruit_AMG88xx amg;
@@ -62,6 +66,7 @@ unsigned long motionEventCount = 0;
 unsigned long lastMotionEventAt = 0;
 unsigned long lastReadAt = 0;
 unsigned long pirHighStartAt = 0;
+unsigned long thermalHighStartAt = 0;
 unsigned long sessionStartAt = 0;
 unsigned long sessionCount = 0;
 unsigned long lastSessionDurationMs = 0;
@@ -134,6 +139,9 @@ String urlEncode(const String& value) {
 void postReading(
   String temperatureC,
   String humidityPercent,
+  String amgAmbientC,
+  String amgMaxC,
+  int amgHotPixels,
   int motion,
   int mq135Raw,
   const char* sensorStatus
@@ -151,6 +159,9 @@ void postReading(
   body += "device_id=" + urlEncode(String(DEVICE_ID));
   body += "&temperature_c=" + temperatureC;
   body += "&humidity_percent=" + humidityPercent;
+  body += "&amg_ambient_c=" + amgAmbientC;
+  body += "&amg_max_c=" + amgMaxC;
+  body += "&amg_hot_pixels=" + String(amgHotPixels);
   body += "&motion=" + String(motion);
   body += "&motion_event_count=" + String(motionEventCount);
   body += "&mq135_raw=" + String(mq135Raw);
@@ -160,9 +171,11 @@ void postReading(
   int code = http.POST(body);
 
   Serial.printf(
-    "POST temp=%s humidity=%s motion=%d events=%lu mq135=%d status=%s -> HTTP %d\n",
+    "POST temp=%s humidity=%s amg_max=%s hot=%d motion=%d events=%lu mq135=%d status=%s -> HTTP %d\n",
     temperatureC.c_str(),
     humidityPercent.c_str(),
+    amgMaxC.c_str(),
+    amgHotPixels,
     motion,
     motionEventCount,
     mq135Raw,
@@ -267,6 +280,37 @@ void updateMotionSession(int motion, unsigned long now) {
   }
 }
 
+bool thermalPresenceDetected() {
+  if (!amgReady || isnan(lastAmgAmbientC) || isnan(lastAmgMaxC)) return false;
+
+  float thermalDelta = lastAmgMaxC - lastAmgAmbientC;
+  return thermalDelta >= THERMAL_DELTA_TRIGGER_C || lastAmgHotPixelCount >= THERMAL_HOT_PIXEL_TRIGGER;
+}
+
+void updateThermalSession(bool thermalDetected, unsigned long now) {
+  if (thermalDetected && !catPresent) {
+    if (thermalHighStartAt == 0) {
+      thermalHighStartAt = now;
+    } else if (now - thermalHighStartAt >= THERMAL_DEBOUNCE_MS) {
+      if (lastMotionEventAt == 0 || now - lastMotionEventAt >= MOTION_EVENT_COOLDOWN_MS) {
+        motionEventCount++;
+        lastMotionEventAt = now;
+        Serial.printf("Thermal event #%lu\n", motionEventCount);
+      }
+      startSession(thermalHighStartAt);
+    }
+  }
+
+  if (!thermalDetected) {
+    thermalHighStartAt = 0;
+    if (catPresent) {
+      endSession(now);
+    }
+  }
+
+  lastMotion = thermalDetected ? HIGH : LOW;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -293,8 +337,10 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
-  int motion = digitalRead(PIR_PIN);
-  updateMotionSession(motion, now);
+  int pirMotion = digitalRead(PIR_PIN);
+  if (USE_PIR_MOTION) {
+    updateMotionSession(pirMotion, now);
+  }
 
   if (!warmedUp && now >= MQ135_WARMUP_MS) {
     warmedUp = true;
@@ -310,6 +356,11 @@ void loop() {
   float humidity = dht.readHumidity();
   float temperatureC = dht.readTemperature();
   bool amgOk = readAmg8833();
+  bool thermalMotion = thermalPresenceDetected();
+  if (!USE_PIR_MOTION) {
+    updateThermalSession(thermalMotion, now);
+  }
+  int motion = USE_PIR_MOTION ? pirMotion : (thermalMotion ? HIGH : LOW);
   int mq135Raw = analogRead(MQ135_AO_PIN);
 
   if (catPresent) {
@@ -326,6 +377,8 @@ void loop() {
   String uploadTemp = isnan(temperatureC) ? "" : String(temperatureC, 1);
   if (uploadTemp == "" && amgOk) uploadTemp = String(lastAmgAmbientC, 1);
   String uploadHumidity = isnan(humidity) ? "" : String(humidity, 1);
+  String uploadAmgAmbient = amgOk ? String(lastAmgAmbientC, 1) : "";
+  String uploadAmgMax = amgOk ? String(lastAmgMaxC, 1) : "";
 
   Serial.printf(
     "[DATA] temp=%.1fC humidity=%.1f%% amg_ambient=%.1fC amg_max=%.1fC hot=%d motion=%d in_session=%s events=%lu mq135=%d samples=%lu status=%s\n",
@@ -345,6 +398,9 @@ void loop() {
   postReading(
     uploadTemp,
     uploadHumidity,
+    uploadAmgAmbient,
+    uploadAmgMax,
+    amgOk ? lastAmgHotPixelCount : 0,
     motion,
     mq135Raw,
     status

@@ -47,6 +47,14 @@ MQ135 说明：这一版只用 `AO` 模拟输出，用来观察广谱气味 / VO
 
 DHT11 如果是裸传感器，DATA 和 3.3V 之间建议加 4.7k-10k 上拉电阻。很多 DHT11 模块板已经自带电阻。
 
+这一版默认用 AMG8833 热区停留来计算 event，而不是 SR60/PIR：
+
+```cpp
+const bool USE_PIR_MOTION = false;
+```
+
+当它是 `false` 时，AMG8833 连续几秒检测到热区，才会累计一次 event。只有在 SR60/PIR 的 OUT 已经稳定接到 GPIO 6 时，才建议改成 `true`。
+
 ## Arduino IDE 需要安装
 
 Library Manager 里安装：
@@ -101,6 +109,9 @@ ESP32 会上传：
 device_id
 temperature_c
 humidity_percent
+amg_ambient_c
+amg_max_c
+amg_hot_pixels
 motion
 motion_event_count
 mq135_raw
@@ -112,9 +123,10 @@ sensor_status
 
 - 当前温度
 - 当前湿度
+- AMG8833 远红外最高热区和热像素数量
 - MQ135 气味 / VOC 原始值
-- 是否检测到 motion
-- motion 次数
+- 是否检测到 presence
+- presence event 次数
 - 最后更新时间
 - 最近数据表格
 
@@ -123,10 +135,14 @@ sensor_status
 这一版可以证明：
 
 - AMG8833 可以在 DHT11 不稳定时提供温度 fallback。
+- AMG8833 可以提供“远红外热区 / presence attempt”信号，例如最高热像素温度和热像素数量。
+- 如果 SR60/PIR 的 GPIO motion 不稳定，AMG8833 热区停留可以代替 event 计数。
 - DHT11 接线和上拉正确时可以记录湿度。
 - SR60 接到配置好的 GPIO 后可以检测靠近 / 活动。
 - ESP32-S3 能通过 Wi-Fi 上传数据。
 - 本地网页能从真实硬件实时更新。
+
+AMG8833 的数值不是体温，也不能作为医疗测量。
 
 这一版暂时不能证明：
 

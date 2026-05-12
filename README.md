@@ -49,6 +49,14 @@ MQ135 note: `AO` is the useful analog trend output. `DO` is only a threshold on/
 
 For DHT11, use a 4.7k-10k pull-up resistor between DATA and 3.3V if your DHT11 module does not already include one.
 
+By default, this version uses AMG8833 thermal presence instead of SR60/PIR for event counting:
+
+```cpp
+const bool USE_PIR_MOTION = false;
+```
+
+When this is `false`, an event is counted only after the AMG8833 detects a warm region for several seconds. Set it to `true` only if the SR60/PIR output is reliably wired to GPIO 6.
+
 ## Arduino Libraries
 
 Install these in Arduino IDE Library Manager:
@@ -103,6 +111,9 @@ ESP32 sends:
 device_id
 temperature_c
 humidity_percent
+amg_ambient_c
+amg_max_c
+amg_hot_pixels
 motion
 motion_event_count
 mq135_raw
@@ -114,9 +125,10 @@ The dashboard shows:
 
 - Current temperature
 - Current humidity
+- AMG8833 thermal IR max pixel and hot-pixel count
 - Current MQ135 odor/VOC raw value
-- Motion state
-- Motion event count
+- Presence state
+- Presence event count
 - Last update time
 - Recent trend table
 
@@ -125,9 +137,11 @@ The dashboard shows:
 This version proves:
 
 - AMG8833 can provide near-box temperature fallback when DHT11 is unavailable.
+- AMG8833 can provide a thermal warm-region / presence-attempt signal through max pixel temperature and hot-pixel count.
+- AMG8833 thermal presence can replace SR60/PIR event counting when GPIO motion wiring is unreliable.
 - DHT11 can capture humidity when wiring and pull-up are correct.
 - SR60 can detect motion / presence events when wired to the configured GPIO.
 - ESP32-S3 can upload sensor readings to a local server.
 - A local browser dashboard can update from real hardware data.
 
-This version does not detect ammonia, stool shape/color, disease, or cat identity.
+AMG8833 values are not body temperature and should not be treated as a medical measurement. This version does not detect ammonia, stool shape/color, disease, or cat identity.
